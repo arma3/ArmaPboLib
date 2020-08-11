@@ -379,7 +379,7 @@ void PboReader::readHeadersSparse() {
 #include <array>
 
 extern "C" {
-#include "sha1.h"
+#include "../lib/sha1.h"
 }
 
 
