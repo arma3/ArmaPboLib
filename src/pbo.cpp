@@ -335,9 +335,9 @@ void PboReader::readHeaders() {
     //We just read the last terminating entry header too.
     headerEnd = input.tellg();
 
-    size_t curPos = headerEnd;
+    int32_t curPos = 0; // This is intentional, Obfuscated PBO's like to mess with it so we do it the same way as Arma does
     for (auto& it : files) {
-        it.startOffset = curPos;
+        it.startOffset = curPos + headerEnd;
         curPos += it.data_size;
     }
     auto fileEnd = curPos;
