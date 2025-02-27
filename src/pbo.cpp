@@ -139,6 +139,12 @@ void PboEntryBuffer::lzss_decomp(std::istream& input, std::vector<char>& output,
 PboEntryBuffer::
 PboEntryBuffer(const PboReader& rd, const PboEntry& ent, uint32_t bufferSize): buffer(std::min(ent.original_size, bufferSize)), file(ent),
                                                                                reader(rd) {
+
+    // Initialize our buffer, so that all further reads are done via that
+
+    if (ent.original_size == 0)
+        return; // File is empty, there will be no reads
+
     char* start = &buffer.front();
     setg(start, start, start);
 
