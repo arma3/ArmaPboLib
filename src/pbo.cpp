@@ -380,7 +380,7 @@ void PboReader::readHeadersSparse() {
 
 #ifdef ARMA_PBO_LIB_WRITE
 
-#ifdef ARMA_PBO_LIB_SHA1
+#if defined(ARMA_PBO_LIB_SHA1) && __has_include("sha1.h")
 
 #include <array>
 
@@ -467,9 +467,9 @@ void PboFTW_FromString::writeDataTo(std::ostream& output) {
 
 
 void PboFTW_NoTouch::processData(std::iostream& output
-#ifdef ARMA_PBO_LIB_SHA1
+#if defined(ARMA_PBO_LIB_SHA1) && __has_include("sha1.h")
     , hashing_ostreambuf& hashOutbuf
-#endif        
+#endif
 ) {
     auto p1 = output.tellp();
     auto g1 = output.tellg();
@@ -489,7 +489,9 @@ void PboFTW_NoTouch::processData(std::iostream& output
 
         if (std::min(buf.size(), sizeLeft) != output.gcount())
             __debugbreak();
+#if defined(ARMA_PBO_LIB_SHA1) && __has_include("sha1.h")
         hashOutbuf.AddDataNoOutput(buf.data(), output.gcount());
+#endif
         sizeLeft -= output.gcount();
     } while (output.gcount() > 0 && sizeLeft > 0);
 
@@ -525,7 +527,7 @@ struct pboEntryHeader {
 
 void PboWriter::writePbo(std::ostream& output) {
 
-#ifdef ARMA_PBO_LIB_SHA1
+#if defined(ARMA_PBO_LIB_SHA1) && __has_include("sha1.h")
     hashing_ostreambuf hashOutbuf(output);
 
     std::ostream out(&hashOutbuf);
@@ -581,7 +583,7 @@ void PboWriter::writePbo(std::ostream& output) {
     }
 
 
-#ifdef ARMA_PBO_LIB_SHA1
+#if defined(ARMA_PBO_LIB_SHA1) && __has_include("sha1.h")
     auto hash = hashOutbuf.getResult();
 
     //no need to write to hashing buf anymore
@@ -596,7 +598,7 @@ void PboWriter::writePbo(std::ostream& output) {
 }
 
 void PboWriter::writePboEx(std::iostream& output) {
-#ifdef ARMA_PBO_LIB_SHA1
+#if defined(ARMA_PBO_LIB_SHA1) && __has_include("sha1.h")
     hashing_ostreambuf hashOutbuf(output);
 
     std::ostream out(&hashOutbuf);
@@ -646,7 +648,7 @@ void PboWriter::writePboEx(std::iostream& output) {
 
         if (auto noTouchWriter = dynamic_cast<PboFTW_NoTouch*>(it.get())) {
             noTouchWriter->processData(output
-#ifdef ARMA_PBO_LIB_SHA1
+#if defined(ARMA_PBO_LIB_SHA1) && __has_include("sha1.h")
                 , hashOutbuf
 #endif
             );
@@ -655,7 +657,7 @@ void PboWriter::writePboEx(std::iostream& output) {
     }
 
 
-#ifdef ARMA_PBO_LIB_SHA1
+#if defined(ARMA_PBO_LIB_SHA1) && __has_include("sha1.h")
     auto hash = hashOutbuf.getResult();
 
     //no need to write to hashing buf anymore

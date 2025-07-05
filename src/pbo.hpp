@@ -175,7 +175,7 @@ public:
     }
     void writeDataTo(std::ostream& output) override {};
     void processData(std::iostream& output
-#ifdef ARMA_PBO_LIB_SHA1
+#if defined(ARMA_PBO_LIB_SHA1) && __has_include("sha1.h")
         , hashing_ostreambuf& hashOutbuf
 #endif        
         );
