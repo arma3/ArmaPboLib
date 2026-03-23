@@ -37,6 +37,9 @@ enum class PboEntryPackingMethod {
     none,
     version,
     compressed,
+#if __has_include(<zstd.h>)
+    compressedZstd,
+#endif
     encrypted
 };
 
@@ -135,6 +138,15 @@ public:
     //    entryInfo.data_size = entryInfo.original_size = std::filesystem::file_size(file);
     //    return entryInfo;
     //}
+    void writeDataTo(std::ostream& output) override;
+};
+
+class PboFTW_CopyFromFileCompressed : public PboFileToWrite {
+    std::filesystem::path file;
+    std::vector<char> compressedData;
+public:
+    PboFTW_CopyFromFileCompressed(std::string filename, std::filesystem::path inputFile);
+
     void writeDataTo(std::ostream& output) override;
 };
 

@@ -1,5 +1,10 @@
 #include "pbo.hpp"
 
+#if __has_include(<zstd.h>)
+#include <zstd.h>
+#endif
+
+
 bool PboProperty::read(std::istream& in) {
     std::getline(in, key, '\0');
     if (key.empty()) return false; //We tried to read the end element of the property list
@@ -32,12 +37,19 @@ void PboEntry::read(std::istream& in) {
     if (header.method == 'Cprs') { //compressed
         method = PboEntryPackingMethod::compressed;
     }
+#if __has_include(<zstd.h>)
+    if (header.method == 'CprZ') { //compressed
+        method = PboEntryPackingMethod::compressedZstd;
+    }
+#endif
     if (header.method == 'Vers') { //Version
         method = PboEntryPackingMethod::version;
     }
 
     data_size = header.datasize;
     if (method == PboEntryPackingMethod::compressed)
+        original_size = header.originalsize;
+    else if (method == PboEntryPackingMethod::compressedZstd)
         original_size = header.originalsize;
     else
         original_size = header.datasize;
@@ -56,6 +68,9 @@ void PboEntry::write(std::ostream& out, bool noDate) const {
         case PboEntryPackingMethod::none: header.method = 0; break;
         case PboEntryPackingMethod::version: header.method = 'Vers'; break;
         case PboEntryPackingMethod::compressed: header.method = 'Cprs'; break;
+#if __has_include(<zstd.h>)
+        case PboEntryPackingMethod::compressedZstd: header.method = 'CprZ'; break;
+#endif
         case PboEntryPackingMethod::encrypted: header.method = 'Encr'; break;
         default: __debugbreak();
     }
@@ -136,8 +151,7 @@ void PboEntryBuffer::lzss_decomp(std::istream& input, std::vector<char>& output,
     }
 }
 
-PboEntryBuffer::
-PboEntryBuffer(const PboReader& rd, const PboEntry& ent, uint32_t bufferSize): buffer(std::min(ent.original_size, bufferSize)), file(ent),
+PboEntryBuffer::PboEntryBuffer(const PboReader& rd, const PboEntry& ent, uint32_t bufferSize): buffer(std::min(ent.original_size, bufferSize)), file(ent),
                                                                                reader(rd) {
 
     // Initialize our buffer, so that all further reads are done via that
@@ -158,6 +172,26 @@ PboEntryBuffer(const PboReader& rd, const PboEntry& ent, uint32_t bufferSize): b
         bufferEndFilePos = ent.original_size;
         setg(&buffer.front(), &buffer.front(), &buffer.front() + ent.original_size);
     }
+#if __has_include(<zstd.h>)
+    else if (ent.method == PboEntryPackingMethod::compressedZstd) {
+
+        rd.input.seekg(file.startOffset);
+
+        buffer.resize(ent.original_size);
+        //#TODO decompress stream
+
+        std::vector<char> tmpBuffer;
+        tmpBuffer.resize(ent.data_size);
+        rd.input.read(tmpBuffer.data(), tmpBuffer.size());
+
+        ZSTD_decompress(buffer.data(), buffer.size(), tmpBuffer.data(), tmpBuffer.size());
+        // Check that result size == original_size
+
+        bufferEndFilePos = ent.original_size;
+        setg(&buffer.front(), &buffer.front(), &buffer.front() + ent.original_size);
+    }
+#endif
+
 }
 
 void PboEntryBuffer::setBufferSize(size_t newSize) {
@@ -323,7 +357,7 @@ void PboReader::readHeaders() {
     if (intro.method == PboEntryPackingMethod::none) {//Broken 3den exported pbo
         input.seekg(0, std::istream::beg); //Seek back to start
         badHeader = true;
-    } else {   
+    } else {
         PboProperty prop;
         while (prop.read(input)) {
             properties.emplace_back(std::move(prop));
@@ -452,6 +486,54 @@ void PboFTW_CopyFromFile::writeDataTo(std::ostream& output) {
         output.write(buf.data(), inp.gcount());
     } while (inp.gcount() > 0);
 }
+
+
+PboFTW_CopyFromFileCompressed::PboFTW_CopyFromFileCompressed(std::string filename, std::filesystem::path inputFile) : file(std::move(inputFile)) {
+    entryInfo.name = std::move(filename);
+    //only backslash in pbo
+    std::replace(entryInfo.name.begin(), entryInfo.name.end(), '/', '\\');
+    entryInfo.data_size = entryInfo.original_size = std::filesystem::file_size(file); //I expect file size not to change.
+
+    // This is not built for memory/speed efficiency
+// Should do stream compression, should do it at writeDataTo time, but then we need to seek back and set the data_size in header, after we know how large compressed data is
+
+    std::vector<char> inputBuffer;
+    {
+        std::ifstream inp(file, std::ifstream::binary);
+        //if (!file->good())
+        //    return nullptr;
+
+        inp.seekg(0, inp.end);
+        int64_t file_size = (int64_t)inp.tellg();
+        inp.seekg(0, inp.beg);
+
+        //if (file_size <= 0)
+        //    return nullptr;
+
+        std::unique_ptr<std::vector<char>> buffer(new std::vector<char>(file_size));
+
+        inputBuffer.resize(file_size);
+        inp.read(inputBuffer.data(), file_size);
+    }
+
+#ifdef __has_include(<zstd.h>)
+    entryInfo.method = PboEntryPackingMethod::compressedZstd;
+
+    compressedData.resize(ZSTD_compressBound(inputBuffer.size()));
+
+    size_t const cSize = ZSTD_compress(compressedData.data(), compressedData.size(), inputBuffer.data(), inputBuffer.size(), 16);
+    compressedData.resize(cSize);
+    entryInfo.data_size = cSize;
+#else
+    compressedData = std::move(inputBuffer); // Save uncompressed
+#endif
+
+}
+
+void PboFTW_CopyFromFileCompressed::writeDataTo(std::ostream& output) {
+    output.write(compressedData.data(), compressedData.size());
+}
+
 
 
 void PboFTW_FromString::writeDataTo(std::ostream& output) {
